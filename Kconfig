@@ -1,0 +1,27 @@
+mainmenu "Smart Home Gateway Configuration"
+
+source "Kconfig.zephyr"
+
+config SHG_SHELL_PRODUCTION
+	bool "Enable production shell commands"
+	default y
+	help
+	  Enables the production shell command set (shg info, fs ls, fs cat).
+
+config SHG_SHELL_DEBUG
+	bool "Enable debug shell commands"
+	default n
+	help
+	  Enables additional debug shell commands (thread info, memory dump).
+
+config SYSTEM_MGR_LOG_LEVEL
+	int "System Manager log level"
+	default 3
+	help
+	  Log level for the system_mgr module (0=OFF, 1=ERR, 2=WRN, 3=INF, 4=DBG).
+
+config STORAGE_MGR_LOG_LEVEL
+	int "Storage Manager log level"
+	default 3
+	help
+	  Log level for the storage_mgr module (0=OFF, 1=ERR, 2=WRN, 3=INF, 4=DBG).

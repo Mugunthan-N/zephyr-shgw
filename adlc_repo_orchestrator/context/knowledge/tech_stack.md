@@ -10,6 +10,8 @@ agents: [all]
 
 ## Runtime
 
+<!-- Healed from task task-001: Added Zephyr VERSION file format knowledge (DEF-001) -->
+
 - **Language**: C (C11 standard, Zephyr-compatible subset)
 - **RTOS**: Zephyr RTOS (latest LTS from west manifest)
 - **Target SoC**: Nordic nRF5340 (dual-core Cortex-M33, 128 MHz app core / 64 MHz net core)
@@ -117,3 +119,23 @@ west build -b nrf7002dk/nrf5340/cpunet -d build_netcore zephyr/samples/bluetooth
 | **No POSIX APIs** | Use Zephyr kernel APIs only (k_thread, k_msgq, k_sem, k_event, etc.) |
 | **No floating point in hot paths** | nRF5340 has FPU but avoid in ISRs and high-priority threads |
 | **Thread stack sizes are fixed** | Defined at compile time, cannot grow at runtime |
+
+## Zephyr VERSION File Format
+
+<!-- Healed from task task-001: Developer didn't know VERSION_TWEAK is mandatory in Zephyr v4.4+ (DEF-001) -->
+
+The Zephyr build system parses a `VERSION` file at the project root (and in test directories) to generate `app_version.h`. **All four fields are required as of Zephyr v4.4:**
+
+```
+VERSION_MAJOR = 0
+VERSION_MINOR = 1
+PATCHLEVEL = 0
+VERSION_TWEAK = 0
+```
+
+**Key facts:**
+- The field is `PATCHLEVEL` (not `VERSION_PATCH`) — Zephyr's own naming convention
+- `VERSION_TWEAK` was optional before Zephyr v4.4 but is **mandatory** from v4.4 onward — omitting it causes a CMake build error
+- This applies to **all** `VERSION` files in the workspace, including those in `tests/unit/test_*/VERSION`
+- The generated header `app_version.h` provides: `APP_VERSION_STRING`, `APP_VERSION_MAJOR`, `APP_VERSION_MINOR`, `APP_VERSION_PATCHLEVEL`, `APP_PATCHLEVEL` (no `APP_VERSION_PATCH`)
+- Test directories that define their own `VERSION` file must also include all four fields

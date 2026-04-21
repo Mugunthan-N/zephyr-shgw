@@ -1,0 +1,5 @@
+tests:
+  unit.shell:
+    platform_allow: native_sim
+    tags: shell phase1
+    timeout: 60

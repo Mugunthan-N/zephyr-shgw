@@ -1,0 +1,51 @@
+/ {
+	fstab {
+		compatible = "zephyr,fstab";
+		lfs1: lfs1 {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs";
+			partition = <&lfs1_partition>;
+			automount;
+			read-size = <256>;
+			prog-size = <256>;
+			cache-size = <4096>;
+			lookahead-size = <256>;
+			block-cycles = <512>;
+		};
+	};
+
+	zwave_module {
+		compatible = "gpio-keys";
+		zwave_reset: zwave_reset {
+			gpios = <&gpio1 6 GPIO_ACTIVE_LOW>;
+			label = "Z-Wave Module Reset";
+		};
+	};
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <115200>;
+	hw-flow-control;
+};
+
+&mx25r64 {
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		mcuboot_secondary_partition: partition@0 {
+			label = "mcuboot-secondary";
+			reg = <0x00000000 0x00100000>;
+		};
+		lfs1_partition: partition@100000 {
+			label = "littlefs-storage";
+			reg = <0x00100000 0x00680000>;
+		};
+		crash_partition: partition@780000 {
+			label = "crash-log";
+			reg = <0x00780000 0x00080000>;
+		};
+	};
+};

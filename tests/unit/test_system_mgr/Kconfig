@@ -1,0 +1,9 @@
+source "Kconfig.zephyr"
+
+config SYSTEM_MGR_LOG_LEVEL
+	int "System Manager log level"
+	default 3
+
+config STORAGE_MGR_LOG_LEVEL
+	int "Storage Manager log level"
+	default 3

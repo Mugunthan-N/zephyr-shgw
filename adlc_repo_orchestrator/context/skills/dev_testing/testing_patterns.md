@@ -270,3 +270,83 @@ west twister -p native_sim -T app/tests/ --enable-coverage
 # Verbose output
 west twister -p native_sim -T app/tests/ -v
 ```
+
+## Shell Command Testing with Dummy Backend
+
+<!-- Healed from task task-001: shell_ready() wait needed for dummy backend activation (DEF-002) -->
+
+Testing shell commands on native_sim requires the **shell dummy backend**. The dummy backend starts in `SHELL_STATE_INITIALIZED` (not `SHELL_STATE_ACTIVE`) — the shell's internal thread must transition to active state before `shell_print()` output will be captured. Without waiting, `shell_vfprintf()` silently drops output.
+
+### prj.conf for Shell Tests
+
+```kconfig
+CONFIG_ZTEST=y
+CONFIG_ZTEST_NEW_API=y
+CONFIG_SHELL=y
+CONFIG_SHELL_BACKEND_DUMMY=y
+CONFIG_SHELL_BACKEND_DUMMY_BUF_SIZE=1024
+CONFIG_SHELL_BACKEND_SERIAL=n
+CONFIG_LOG=y
+CONFIG_LOG_DEFAULT_LEVEL=3
+```
+
+### Shell Test Setup Pattern
+
+```c
+#include <zephyr/ztest.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_dummy.h>
+
+static const struct shell *sh;
+
+static void *shell_test_setup(void)
+{
+    sh = shell_backend_dummy_get_ptr();
+    zassert_not_null(sh, "Dummy backend not available");
+
+    /* CRITICAL: Wait for shell backend to become active.
+     * Without this, the first test case will silently lose all
+     * shell_print() output because shell is still INITIALIZED. */
+    while (!shell_ready(sh)) {
+        k_msleep(10);
+    }
+
+    return NULL;
+}
+
+static void shell_test_before(void *fixture)
+{
+    ARG_UNUSED(fixture);
+    /* Clear output buffer before each test */
+    shell_backend_dummy_clear_output(sh);
+}
+
+ZTEST_SUITE(shell_tests, NULL, shell_test_setup, shell_test_before, NULL, NULL);
+
+ZTEST(shell_tests, test_my_command)
+{
+    int ret = shell_execute_cmd(sh, "my_cmd arg1");
+    zassert_ok(ret, "Command failed: %d", ret);
+
+    const char *output = shell_backend_dummy_get_output(sh, NULL);
+    zassert_not_null(output, "No output captured");
+    zassert_true(strstr(output, "expected text") != NULL,
+                 "Expected text not in output: %s", output);
+}
+```
+
+**Key points:**
+- Use `shell_ready(sh)` in the suite setup function (not per-test) — the backend only needs to activate once
+- Clear the output buffer in the `before` hook so each test starts clean
+- `shell_backend_dummy_get_output()` returns the accumulated output since last clear
+- Disable `CONFIG_SHELL_BACKEND_SERIAL=n` in test builds to avoid conflicts
+
+## Zephyr v4.4+ Test Build Requirements
+
+<!-- Healed from task task-001: Missing VERSION_TWEAK caused build failure (DEF-001) -->
+
+Each test directory that is a standalone Zephyr application needs its own build files. Key requirements for Zephyr v4.4+:
+
+- **VERSION file**: If present, MUST include all four fields: `VERSION_MAJOR`, `VERSION_MINOR`, `PATCHLEVEL`, `VERSION_TWEAK`. Omitting `VERSION_TWEAK` causes a CMake error in Zephyr v4.4+.
+- **Kconfig file**: Test directories need their own `Kconfig` if they use custom `CONFIG_*` symbols defined in the app's root `Kconfig` — test builds don't inherit the app's `Kconfig` automatically.
+- **Board overlays**: Tests that use filesystem/NVS need `boards/native_sim.overlay` with appropriate partition definitions.

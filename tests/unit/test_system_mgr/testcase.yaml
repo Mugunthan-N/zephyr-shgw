@@ -1,0 +1,5 @@
+tests:
+  unit.system_mgr:
+    platform_allow: native_sim
+    tags: system phase1
+    timeout: 60

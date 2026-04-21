@@ -63,6 +63,38 @@ int <module>_init(void) {
 - All public functions prefixed with module name: `wifi_mgr_connect()`, `shadow_mgr_update()`.
 - Module init returns `int` (0 on success, negative errno on failure).
 
+## Init-Guard Pattern for Public APIs
+
+<!-- Healed from task task-001: storage_mgr public APIs lacked init guards (F-001, R-FS-002) -->
+
+Every public API function (except `_init()` itself) MUST check that the module is initialized before performing any operations. This prevents undefined behavior when callers invoke APIs before `<module>_init()` has succeeded.
+
+```c
+int <module>_do_something(const char *param)
+{
+    /* 1. Parameter validation first */
+    if (!param) {
+        return -EINVAL;
+    }
+
+    /* 2. Init guard — immediately after parameter validation */
+    if (!state.initialized) {
+        LOG_ERR("<module> not initialized");
+        return -EAGAIN;
+    }
+
+    /* 3. Actual operation */
+    /* ... */
+    return 0;
+}
+```
+
+**Conventions:**
+- Place the init guard **after** parameter validation but **before** any subsystem operations (FS, NVS, UART, etc.)
+- Return `-EAGAIN` (not `-EINVAL`) to distinguish "not ready" from "bad parameters"
+- Log at `LOG_ERR` level with the module name for diagnosability
+- Apply to **all** public functions that depend on successful initialization — do not skip any
+
 ## Error Handling Pattern
 
 Use Zephyr-style negative errno return codes consistently:
@@ -213,12 +245,19 @@ int storage_write_json(const char *path, const char *json_str)
         return ret;
     }
 
+    ssize_t expected = (ssize_t)strlen(json_str);
     ret = fs_write(&file, json_str, strlen(json_str));
     fs_close(&file);
 
     if (ret < 0) {
         LOG_ERR("Failed to write %s: %d", tmp_path, ret);
         return ret;
+    }
+
+    /* Partial write detection — Healed from task task-001 (F-003) */
+    if (ret != expected) {
+        LOG_ERR("Partial write to %s: wrote %d of %zd bytes", tmp_path, ret, expected);
+        return -EIO;
     }
 
     ret = fs_rename(tmp_path, path);
@@ -233,6 +272,7 @@ int storage_write_json(const char *path, const char *json_str)
 - Always use write-then-rename for critical files (atomic on power loss).
 - Always call `fs_file_t_init()` before first use.
 - Always check return codes from `fs_open`, `fs_write`, `fs_close`, `fs_rename`.
+- **Always verify `fs_write()` wrote the expected number of bytes** — a short write (ret > 0 but < expected) is an error; return `-EIO`.
 - File paths use the mount point `/lfs/` prefix.
 
 ## JSON Pattern (cJSON)

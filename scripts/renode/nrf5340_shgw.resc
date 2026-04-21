@@ -1,0 +1,17 @@
+:name: nRF5340 Smart Home Gateway
+:description: Phase 1 boot verification
+
+using sysbus
+
+mach create "shgw"
+machine LoadPlatformDescription @platforms/cpus/nrf5340_application.repl
+
+# Configure UART0 as console
+showAnalyzer uart0
+
+# Load firmware ELF (path overridable via variable)
+$fw ?= @build/zephyr/zephyr.elf
+sysbus LoadELF $fw
+
+# Start emulation
+start

@@ -308,6 +308,30 @@ endif # SHG_WIFI_MGR
 
 ## Error Return Code Conventions
 
+<!-- Healed from task task-001: Developer missed init guards on 5 public APIs (F-001) and LOG_MODULE_REGISTER on shell files (F-004) -->
+
+### Init Guards — Mandatory for All Public API Functions
+
+Every public function in a module (except `_init()` itself) **MUST** include an init-guard check:
+
+```c
+if (!state.initialized) {
+    LOG_ERR("<module> not initialized");
+    return -EAGAIN;
+}
+```
+
+Place this check **after** parameter validation but **before** any subsystem operations. This applies to ALL modules — storage_mgr, system_mgr, shell helpers, and any future modules. See `context/guidelines/coding_patterns.md` for the full pattern.
+
+### LOG_MODULE_REGISTER — Required in ALL .c Files
+
+**Every** `.c` file under `src/` must have `LOG_MODULE_REGISTER()`, including:
+- Module implementation files (`storage_mgr.c`, `system_mgr.c`)
+- Shell command files (`shell_shg.c`, `shell_fs.c`)
+- Utility files, helpers, or any `.c` file that could produce log output
+
+Shell files use the pattern: `LOG_MODULE_REGISTER(shell_shg, LOG_LEVEL_INF);` (or a Kconfig-controlled level).
+
 | Return | Meaning | When |
 |--------|---------|------|
 | `0` | Success | Operation completed |

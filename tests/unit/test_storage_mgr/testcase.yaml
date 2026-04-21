@@ -1,0 +1,5 @@
+tests:
+  unit.storage_mgr:
+    platform_allow: native_sim
+    tags: storage phase1
+    timeout: 60
