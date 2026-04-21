@@ -1,0 +1,310 @@
+# ============================================================================
+# ADLC Pipeline Configuration
+# ============================================================================
+# This file defines the pipeline stages, agent configurations, context
+# injection paths, and workspace conventions for the ADLC orchestrator.
+# ============================================================================
+
+pipeline:
+  name: "adlc_repo_pipeline"
+  version: "1.0.0"
+  state_file: "workspace/{{task_id}}/state.yaml"
+
+# ---------------------------------------------------------------------------
+# Stage Definitions
+# ---------------------------------------------------------------------------
+# Stages execute in `order` sequence. Set `enabled: false` to skip a stage.
+# To reorder, change the `order` values. To add a new stage, append an entry
+# with a unique `id`, map it to an agent, and set its order.
+# ---------------------------------------------------------------------------
+stages:
+  - id: "planner"
+    agent: "planner"
+    order: 1
+    enabled: true
+    description: "Decomposes user intent into an actionable task plan"
+    inputs:
+      - "workspace/{{task_id}}/docs/user_request.md"
+    outputs:
+      - "workspace/{{task_id}}/docs/task_plan.md"
+
+  - id: "requirement"
+    agent: "requirement"
+    order: 2
+    enabled: true
+    description: "Expands task plan into a formal requirements document"
+    inputs:
+      - "workspace/{{task_id}}/docs/task_plan.md"
+    outputs:
+      - "workspace/{{task_id}}/docs/requirements.md"
+
+  - id: "designer"
+    agent: "designer"
+    order: 3
+    enabled: true
+    description: "Produces technical design and architecture from requirements"
+    inputs:
+      - "workspace/{{task_id}}/docs/requirements.md"
+    outputs:
+      - "workspace/{{task_id}}/docs/design.md"
+
+  - id: "developer"
+    agent: "developer"
+    order: 4
+    enabled: true
+    description: "Implements code changes directly in the repository based on the design document"
+    inputs:
+      - "workspace/{{task_id}}/docs/design.md"
+      - "workspace/{{task_id}}/docs/requirements.md"
+    outputs:
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+
+  - id: "dev_testing"
+    agent: "dev-testing"
+    order: 5
+    enabled: true
+    description: "Writes tests in the repository and runs them against implemented code"
+    inputs:
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+      - "workspace/{{task_id}}/docs/requirements.md"
+    outputs:
+      - "workspace/{{task_id}}/reports/test_report.md"
+
+  - id: "reviewer"
+    agent: "reviewer"
+    order: 6
+    enabled: true
+    description: "Reviews actual repository file changes for quality, security, and compliance"
+    inputs:
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+      - "workspace/{{task_id}}/reports/test_report.md"
+      - "workspace/{{task_id}}/docs/requirements.md"
+    outputs:
+      - "workspace/{{task_id}}/reports/review_report.md"
+
+  - id: "documenter"
+    agent: "documenter"
+    order: 7
+    enabled: true
+    description: "Generates a comprehensive technical document from all pipeline artefacts and publishes to Confluence"
+    inputs:
+      - "workspace/{{task_id}}/docs/user_request.md"
+      - "workspace/{{task_id}}/docs/task_plan.md"
+      - "workspace/{{task_id}}/docs/requirements.md"
+      - "workspace/{{task_id}}/docs/design.md"
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+      - "workspace/{{task_id}}/reports/test_report.md"
+      - "workspace/{{task_id}}/reports/review_report.md"
+    outputs:
+      - "workspace/{{task_id}}/reports/techno_doc.md"
+
+  - id: "healer"
+    agent: "healer"
+    order: 8
+    enabled: true
+    description: "Retrospects pipeline execution, identifies deviations, and heals context files (knowledge, rules, guidelines, skills) to prevent recurrence"
+    inputs:
+      - "workspace/{{task_id}}/state.yaml"
+      - "workspace/{{task_id}}/feedbacks/"
+      - "workspace/{{task_id}}/reports/review_report.md"
+      - "workspace/{{task_id}}/reports/test_report.md"
+      - "workspace/{{task_id}}/docs/user_request.md"
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+      - "workspace/{{task_id}}/docs/requirements.md"
+    outputs:
+      - "workspace/{{task_id}}/reports/heal_report.md"
+
+  - id: "git_ops"
+    agent: "git-ops"
+    order: 9
+    enabled: true
+    description: "Creates a feature branch, commits changes, pushes, and raises a pull request with documentation links"
+    inputs:
+      - "workspace/{{task_id}}/docs/user_request.md"
+      - "workspace/{{task_id}}/docs/task_plan.md"
+      - "workspace/{{task_id}}/artefacts/IMPLEMENTATION_NOTES.md"
+      - "workspace/{{task_id}}/reports/techno_doc.md"
+      - "workspace/{{task_id}}/reports/review_report.md"
+      - "workspace/{{task_id}}/reports/heal_report.md"
+    outputs:
+      - "workspace/{{task_id}}/reports/pr_report.md"
+
+# ---------------------------------------------------------------------------
+# Context Injection Paths (loaded into every agent before execution)
+# ---------------------------------------------------------------------------
+context:
+  skills_dir: "context/skills/"
+  rules_dir: "context/rules/"
+  knowledge_dir: "context/knowledge/"
+  guidelines_dir: "context/guidelines/"
+
+# ---------------------------------------------------------------------------
+# Agent Defaults
+# ---------------------------------------------------------------------------
+agent_defaults:
+  model: "claude-sonnet-4-20250514"
+  temperature: 0.2
+  max_iterations: 3
+  confidence_threshold: 0.8          # 0.0–1.0, minimum confidence to proceed
+  tools:
+    - "read_file"
+    - "create_file"
+    - "replace_string_in_file"
+    - "grep_search"
+    - "file_search"
+    - "semantic_search"
+    - "run_in_terminal"
+    - "list_dir"
+    - "runTests"
+
+# ---------------------------------------------------------------------------
+# Per-Agent Overrides
+# ---------------------------------------------------------------------------
+agent_overrides:
+  planner:
+    temperature: 0.4
+    tools:
+      - "read_file"
+      - "create_file"
+      - "semantic_search"
+      - "list_dir"
+      - "file_search"
+      # - "com.atlassian/atlassian-mcp-server/*"  # Uncomment if you have Jira MCP
+
+  developer:
+    model: "claude-sonnet-4-20250514"
+    temperature: 0.1
+    max_iterations: 5
+    repo_write_access: true
+    tools:
+      - "read_file"
+      - "create_file"
+      - "replace_string_in_file"
+      - "multi_replace_string_in_file"
+      - "grep_search"
+      - "file_search"
+      - "semantic_search"
+      - "run_in_terminal"
+      - "list_dir"
+      - "runTests"
+      - "get_errors"
+
+  dev_testing:
+    temperature: 0.1
+    max_iterations: 5
+    tools:
+      - "read_file"
+      - "create_file"
+      - "replace_string_in_file"
+      - "grep_search"
+      - "file_search"
+      - "run_in_terminal"
+      - "runTests"
+      - "get_errors"
+
+  reviewer:
+    temperature: 0.3
+    tools:
+      - "read_file"
+      - "create_file"
+      - "grep_search"
+      - "file_search"
+      - "semantic_search"
+      - "list_dir"
+      - "get_errors"
+
+  documenter:
+    temperature: 0.3
+    tools:
+      - "read_file"
+      - "create_file"
+      - "replace_string_in_file"
+      - "list_dir"
+      - "file_search"
+      - "grep_search"
+      # - "com.atlassian/atlassian-mcp-server/*"  # Uncomment if you have Confluence MCP
+
+  healer:
+    temperature: 0.2
+    max_iterations: 3
+    tools:
+      - "read_file"
+      - "create_file"
+      - "replace_string_in_file"
+      - "grep_search"
+      - "file_search"
+      - "semantic_search"
+      - "list_dir"
+
+  git_ops:
+    temperature: 0.1
+    tools:
+      - "read_file"
+      - "create_file"
+      - "replace_string_in_file"
+      - "grep_search"
+      - "file_search"
+      - "run_in_terminal"
+      - "list_dir"
+
+# ---------------------------------------------------------------------------
+# Feedback & Routing
+# ---------------------------------------------------------------------------
+feedback:
+  directory: "workspace/{{task_id}}/feedbacks/"
+  max_rework_cycles: 3
+  routing_map:
+    reviewer_to_developer: "reviewer -> developer"
+    reviewer_to_designer: "reviewer -> designer"
+    dev_testing_to_developer: "dev_testing -> developer"
+    requirement_to_planner: "requirement -> planner"
+    designer_to_requirement: "designer -> requirement"
+
+# ---------------------------------------------------------------------------
+# Documentation Publishing
+# ---------------------------------------------------------------------------
+documentation:
+  platform: "confluence"
+  space_key: ""                          # TODO: Set your Confluence space key
+  parent_page_id: ""                      # TODO: Set the parent page ID
+  title_prefix: "ADLC"
+
+# ---------------------------------------------------------------------------
+# Git Operations
+# ---------------------------------------------------------------------------
+git_ops:
+  base_branch: ""                        # Branch to create from — leave empty to use current branch
+  auto_push: true                        # Push branch to remote after commit
+  auto_pr: true                          # Create PR via GitHub CLI after push
+
+# ---------------------------------------------------------------------------
+# Confidence Gating
+# ---------------------------------------------------------------------------
+# Every agent self-assesses its output confidence (0.0–1.0). The orchestrator
+# checks the score against the threshold and decides whether to proceed.
+#
+# Resolution order for thresholds:
+#   agent_overrides.<stage>.confidence_threshold  (highest priority)
+#   > agent_defaults.confidence_threshold         (fallback)
+#
+# When confidence < threshold:
+#   1. Re-invoke the agent with self-refinement guidance (up to max_retries).
+#   2. If still below threshold, execute the on_low_confidence action:
+#      - "ask_user"             — halt pipeline, present gaps to user for input
+#      - "proceed_with_warning" — log warning in state.yaml, continue anyway
+#      - "fail"                 — set pipeline status to failed, halt
+# ---------------------------------------------------------------------------
+confidence:
+  max_retries: 2                         # Re-invocations to improve confidence before escalation
+  on_low_confidence: "ask_user"          # "ask_user" | "proceed_with_warning" | "fail"
+
+# ---------------------------------------------------------------------------
+# Workspace Conventions
+# ---------------------------------------------------------------------------
+workspace:
+  task_prefix: "task-"
+  directories:
+    - "docs"
+    - "artefacts"
+    - "feedbacks"
+    - "reports"
